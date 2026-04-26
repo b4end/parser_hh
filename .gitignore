@@ -1,6 +1,6 @@
 # Виртуальное окружение
-/venv/
-/env/
+/.venv/
+/.env/
 /.env
 
 # Кэш Python
@@ -11,3 +11,6 @@ __pycache__/
 # Настройки IDE 
 .vscode/
 .idea/
+
+# База данных
+*.db
