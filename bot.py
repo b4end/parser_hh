@@ -58,19 +58,24 @@ async def parsing_task(bot: Bot):
             for vac in reversed(vacancies):
                 vac_id = int(vac['id'])
                 if not await db.vacancy_exists(vac_id):
-                    name = vac.get('name', 'Без названия')
-                    url = vac.get('alternate_url', '#')
-                    employer = vac.get('employer', {}).get('name', 'Неизвестная компания')
-                    salary = format_salary(vac.get('salary'))
-
+                    # Формируем красивую карточку
                     text = (
-                        f"🔥 <b>Новая вакансия:</b> <a href='{url}'>{name}</a>\n"
-                        f"🏢 <b>Компания:</b> {employer}\n"
-                        f"💰 <b>Зарплата:</b> {salary}"
+                        f"🔥 <b><a href='{vac['url']}'>{vac['name']}</a></b>\n"
+                        f"💰 <b>{vac['salary']}</b>\n\n"
+                        f"🏢 <b>Компания:</b> {vac['employer']}\n"
+                        f"📍 <b>Локация:</b> {vac['area']}\n\n"
+                        f"💼 <b>Опыт:</b> {vac['experience']}\n"
+                        f"🕒 <b>Формат:</b> {vac['work_formats']}\n"
                     )
 
                     try:
-                        await bot.send_message(chat_id=ADMIN_ID, text=text, parse_mode=ParseMode.HTML)
+                        # Отправляем сообщение, отключив превью ссылки (чтобы не засорять чат огромными картинками HH)
+                        await bot.send_message(
+                            chat_id=ADMIN_ID, 
+                            text=text, 
+                            parse_mode=ParseMode.HTML,
+                            disable_web_page_preview=True 
+                        )
                         await db.add_vacancy(vac_id)
                         new_count += 1
                         await asyncio.sleep(1.2)  # Защита от флуда Telegram
@@ -86,7 +91,7 @@ async def parsing_task(bot: Bot):
         except Exception as e:
             logging.error(f"💥 Критическая ошибка в цикле парсинга: {e}")
 
-        # Пауза между проверками (5 минут)
+        # Пауза между проверками (5 минут = 300 секунд)
         await asyncio.sleep(300)
 
 async def db_cleanup_task():
