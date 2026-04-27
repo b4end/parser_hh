@@ -25,7 +25,7 @@
 1. **Склонируйте репозиторий:**
    ```bash
    git clone https://github.com/b4end/parser_hh.git
-   cd hh_parser_bot
+   cd parser_hh
    ```
 
 2. **Создайте виртуальное окружение и установите зависимости:**
