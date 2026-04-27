@@ -19,7 +19,6 @@ HEADERS = {
     "Referer": "https://hh.ru/",
 }
 
-# Словари для перевода данных из HH JSON в человеческий вид
 EXPERIENCE_MAP = {
     "noExperience": "Без опыта",
     "between1And3": "От 1 года до 3 лет",
@@ -54,7 +53,7 @@ def format_salary(comp: dict) -> str:
 
 async def fetch_vacancies() -> list:
     """Парсит страницу поиска HH через извлечение SSR State (JSON)."""
-    # Твои параметры из ссылки
+    # Параметры создания ссылки для парсинга
     params = {
         "education": "not_required_or_not_specified",
         "ored_clusters": "true",
@@ -74,7 +73,6 @@ async def fetch_vacancies() -> list:
 
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Ищем тег с состоянием страницы (там лежат все данные в виде JSON)
             state_template = soup.find('template', id='HH-Lux-InitialState')
             if not state_template:
                 logging.error("❌ Не найден тег состояния HH-Lux-InitialState. Возможно hh.ru изменил вёрстку.")
@@ -82,7 +80,6 @@ async def fetch_vacancies() -> list:
 
             state_json = json.loads(state_template.text)
             
-            # Достаем список вакансий
             raw_vacancies = state_json.get('vacancySearchResult', {}).get('vacancies', [])
             
             unique_vacancies =[]
@@ -93,7 +90,7 @@ async def fetch_vacancies() -> list:
                 if not vac_id or vac_id in seen_ids:
                     continue
                 
-                # === ФИЛЬТРАЦИЯ ПО ОПЫТУ ===
+                # ФИЛЬТРАЦИЯ ПО ОПЫТУ
                 exp_code = vac.get('workExperience', '')
                 if exp_code not in ('noExperience', 'between1And3'):
                     continue # Игнорируем всё, что не подходит под условия
