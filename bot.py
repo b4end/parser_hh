@@ -54,22 +54,30 @@ async def parsing_task(bot: Bot):
             vacancies = await parser.fetch_vacancies()
             new_count = 0
 
-            # Разворачиваем, чтобы сначала шли самые старые из новых (хронологический порядок)
             for vac in reversed(vacancies):
                 vac_id = int(vac['id'])
                 if not await db.vacancy_exists(vac_id):
-                    # Формируем красивую карточку
+                    
+                    # Подготавливаем опциональные бейджи
+                    it_badge = "🎖 <b>Аккредитованная ИТ-компания</b>\n" if vac['is_it_accredited'] else ""
+                    gph_badge = "📄 <b>Доступно по ГПХ / Подработка</b>\n" if vac['accept_temporary'] else ""
+                    rating_text = f"⭐ {vac['rating']}/5" if vac['rating'] else "Без оценки"
+
                     text = (
                         f"🔥 <b><a href='{vac['url']}'>{vac['name']}</a></b>\n"
                         f"💰 <b>{vac['salary']}</b>\n\n"
-                        f"🏢 <b>Компания:</b> {vac['employer']}\n"
-                        f"📍 <b>Локация:</b> {vac['area']}\n\n"
+                        f"🏢 <b>Компания:</b> {vac['employer']} ({rating_text})\n"
+                        f"📍 <b>Локация:</b> {vac['area']}\n"
+                        f"{it_badge}"
+                        f"{gph_badge}\n"
                         f"💼 <b>Опыт:</b> {vac['experience']}\n"
-                        f"🕒 <b>Формат:</b> {vac['work_formats']}\n"
+                        f"🕒 <b>Формат:</b> {vac['work_formats']}\n\n"
+                        f"📈 <b>Уже откликнулись:</b> {vac['responses']} чел.\n"
+                        f"👀 <b>Смотрят сейчас:</b> {vac['viewers_now']} чел.\n"
+                        f"📅 <b>Опубликовано:</b> {vac['published_at']}"
                     )
 
                     try:
-                        # Отправляем сообщение, отключив превью ссылки (чтобы не засорять чат огромными картинками HH)
                         await bot.send_message(
                             chat_id=ADMIN_ID, 
                             text=text, 
@@ -78,7 +86,7 @@ async def parsing_task(bot: Bot):
                         )
                         await db.add_vacancy(vac_id)
                         new_count += 1
-                        await asyncio.sleep(1.2)  # Защита от флуда Telegram
+                        await asyncio.sleep(1.2)  
                     except Exception as send_err:
                         logging.error(f"❌ Ошибка отправки сообщения: {send_err}")
 
@@ -91,7 +99,6 @@ async def parsing_task(bot: Bot):
         except Exception as e:
             logging.error(f"💥 Критическая ошибка в цикле парсинга: {e}")
 
-        # Пауза между проверками (5 минут = 300 секунд)
         await asyncio.sleep(300)
 
 async def db_cleanup_task():
