@@ -24,7 +24,7 @@
 
 1. **Склонируйте репозиторий:**
    ```bash
-   git clone https://github.com/b4end/hh_parser_bot.git
+   git clone https://github.com/b4end/parser_hh.git
    cd hh_parser_bot
    ```
 
