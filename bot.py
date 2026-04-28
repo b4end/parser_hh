@@ -58,23 +58,38 @@ async def parsing_task(bot: Bot):
                 vac_id = int(vac['id'])
                 if not await db.vacancy_exists(vac_id):
                     
-                    # Подготавливаем опциональные бейджи
-                    it_badge = "🎖 <b>Аккредитованная ИТ-компания</b>\n" if vac['is_it_accredited'] else ""
-                    gph_badge = "📄 <b>Доступно по ГПХ / Подработка</b>\n" if vac['accept_temporary'] else ""
-                    rating_text = f"⭐ {vac['rating']}/5" if vac['rating'] else "Без оценки"
+                    # Используем .get() с дефолтными значениями, чтобы избежать KeyError
+                    name = vac.get('name', 'Без названия')
+                    url = vac.get('url', '#')
+                    salary = vac.get('salary', 'Зарплата не указана')
+                    employer = vac.get('employer', 'Компания не указана')
+                    rating = vac.get('rating')
+                    rating_text = f"⭐ {rating}/5" if rating else "Без рейтинга"
+                    
+                    area = vac.get('area', 'Локация не указана')
+                    experience = vac.get('experience', 'Не указан')
+                    work_formats = vac.get('work_formats', 'Не указан')
+                    
+                    responses = vac.get('responses', 0)
+                    viewers = vac.get('viewers_now', 0)
+                    pub_at = vac.get('published_at', 'Неизвестно')
+
+                    # Проверяем бейджи (используем .get, чтобы не упасть)
+                    it_badge = "🎖 <b>Аккредитованная ИТ-компания</b>\n" if vac.get('is_it_accredited') else ""
+                    gph_badge = "📄 <b>Доступно по ГПХ / Подработка</b>\n" if vac.get('accept_temporary') else ""
 
                     text = (
-                        f"🔥 <b><a href='{vac['url']}'>{vac['name']}</a></b>\n"
-                        f"💰 <b>{vac['salary']}</b>\n\n"
-                        f"🏢 <b>Компания:</b> {vac['employer']} ({rating_text})\n"
-                        f"📍 <b>Локация:</b> {vac['area']}\n"
+                        f"🔥 <b><a href='{url}'>{name}</a></b>\n"
+                        f"💰 <b>{salary}</b>\n\n"
+                        f"🏢 <b>Компания:</b> {employer} ({rating_text})\n"
+                        f"📍 <b>Локация:</b> {area}\n"
                         f"{it_badge}"
                         f"{gph_badge}\n"
-                        f"💼 <b>Опыт:</b> {vac['experience']}\n"
-                        f"🕒 <b>Формат:</b> {vac['work_formats']}\n\n"
-                        f"📈 <b>Уже откликнулись:</b> {vac['responses']} чел.\n"
-                        f"👀 <b>Смотрят сейчас:</b> {vac['viewers_now']} чел.\n"
-                        f"📅 <b>Опубликовано:</b> {vac['published_at']}"
+                        f"💼 <b>Опыт:</b> {experience}\n"
+                        f"🕒 <b>Формат:</b> {work_formats}\n\n"
+                        f"📈 <b>Уже откликнулись:</b> {responses} чел.\n"
+                        f"👀 <b>Смотрят сейчас:</b> {viewers} чел.\n"
+                        f"📅 <b>Опубликовано:</b> {pub_at}"
                     )
 
                     try:
@@ -97,6 +112,7 @@ async def parsing_task(bot: Bot):
             logging.info("🛑 Задача парсинга отменена.")
             break
         except Exception as e:
+            # Теперь здесь не будет KeyError: 'is_it_accredited'
             logging.error(f"💥 Критическая ошибка в цикле парсинга: {e}")
 
         await asyncio.sleep(300)
