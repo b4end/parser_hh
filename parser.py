@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import json
 import os
@@ -13,7 +12,7 @@ HH_PROXY = os.getenv('HH_PROXY')
 SEARCH_URL = "https://hh.ru/search/vacancy"
 
 HEADERS = {
-    "User-Agent": f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 (jeeitunes@gmail.com)",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 (jeeitunes@gmail.com)",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
     "Referer": "https://hh.ru/",
@@ -56,7 +55,6 @@ def format_date(iso_date_str: str) -> str:
     if not iso_date_str:
         return "Не указана"
     try:
-        # Парсим строку вида '2026-04-21T12:17:50.647+03:00'
         dt = datetime.fromisoformat(iso_date_str)
         return dt.strftime("%d.%m.%Y %H:%M")
     except Exception:
@@ -64,12 +62,14 @@ def format_date(iso_date_str: str) -> str:
 
 async def fetch_vacancies() -> list:
     params = {
+        "text": "Data scientist",
+        "area": "113", 
         "education": "not_required_or_not_specified",
         "ored_clusters": "true",
-        "text": "Data scientist",
         "order_by": "publication_time"
     }
 
+    # Если прокси передан, curl_cffi будет использовать его
     proxy_config = {"http": HH_PROXY, "https": HH_PROXY} if HH_PROXY else None
 
     async with AsyncSession(impersonate="chrome124", timeout=15, proxies=proxy_config) as session:
@@ -81,6 +81,13 @@ async def fetch_vacancies() -> list:
                 return[]
 
             soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # 🔥 1. Проверка на капчу (HH возвращает заголовок "Ой!" или страницу защиты Cloudflare/Qrator)
+            page_title = soup.title.text.strip() if soup.title else ""
+            if "Ой!" in page_title or "защит" in page_title.lower():
+                logging.error(f"⚠️ HH.ru выдал капчу или заблокировал IP! Заголовок страницы: {page_title}")
+                return[]
+
             state_template = soup.find('template', id='HH-Lux-InitialState')
             
             if not state_template:
@@ -88,8 +95,13 @@ async def fetch_vacancies() -> list:
                 return[]
 
             state_json = json.loads(state_template.text)
-            raw_vacancies = state_json.get('vacancySearchResult', {}).get('vacancies', [])
+            raw_vacancies = state_json.get('vacancySearchResult', {}).get('vacancies',[])
             
+            # 🔥 2. Проверка на пустой JSON (если вакансий 0)
+            if not raw_vacancies:
+                logging.warning(f"⚠️ Страница загружена успешно, но список вакансий пуст. (Регион поиска: 113).")
+                return []
+                
             unique_vacancies =[]
             seen_ids = set()
 
@@ -103,7 +115,7 @@ async def fetch_vacancies() -> list:
                 if exp_code not in ('noExperience', 'between1And3'):
                     continue 
 
-                # Вытаскиваем форматы работы
+                # Форматы работы
                 raw_formats = vac.get('workFormats', [])
                 formats_list =[]
                 if raw_formats and len(raw_formats) > 0:
@@ -113,7 +125,6 @@ async def fetch_vacancies() -> list:
                 company_info = vac.get('company', {})
                 pub_time_raw = vac.get('publicationTime', {}).get('$', '')
 
-                # Формируем итоговый словарь со всеми новыми крутыми данными
                 processed_vac = {
                     'id': vac_id,
                     'name': vac.get('name', 'Без названия'),
@@ -123,8 +134,6 @@ async def fetch_vacancies() -> list:
                     'experience': EXPERIENCE_MAP.get(exp_code, exp_code),
                     'area': vac.get('area', {}).get('name', 'Локация не указана'),
                     'work_formats': ", ".join(formats_list) if formats_list else "Не указан",
-                    
-                    # НОВЫЕ ПОЛЯ
                     'published_at': format_date(pub_time_raw),
                     'responses': vac.get('totalResponsesCount', 0),
                     'viewers_now': vac.get('online_users_count', 0),
@@ -136,9 +145,9 @@ async def fetch_vacancies() -> list:
                 seen_ids.add(vac_id)
                 unique_vacancies.append(processed_vac)
 
-            logging.info(f"📥 Найдено {len(unique_vacancies)} подходящих вакансий.")
+            logging.info(f"📥 Найдено {len(unique_vacancies)} подходящих вакансий (после фильтрации).")
             return unique_vacancies
 
         except Exception as e:
             logging.error(f"💥 Ошибка парсера: {e}", exc_info=True)
-            return[]
+            return
