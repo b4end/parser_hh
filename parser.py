@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import json
 import os
@@ -147,46 +148,38 @@ async def fetch_html_with_browser(url: str) -> str:
                 viewport={"width": 1920, "height": 1080},
                 locale="ru-RU"
             )
-            
-            # 🔥 ВАЖНО: Устанавливаем куку региона, чтобы HH не путался
-            await context.add_cookies([{
-                'name': 'hhtoken',
-                'value': 'invalid', # просто заглушка
-                'domain': '.hh.ru',
-                'path': '/'
-            }, {
-                'name': 'area',
-                'value': '113', # Москва (как базовый регион для поиска)
-                'domain': '.hh.ru',
-                'path': '/'
-            }])
 
             page = await context.new_page()
             
-            # Переходим по URL
-            logging.info(f"🔗 Переход по адресу...")
-            await page.goto(url, wait_until="networkidle", timeout=60000)
+            # Проверяем работу прокси перед походом на HH
+            try:
+                logging.info("🔌 Проверка прокси через ident.me...")
+                await page.goto("https://ident.me", timeout=15000)
+                ip = await page.inner_text("body")
+                logging.info(f"✅ Прокси работает. Внешний IP: {ip.strip()}")
+            except Exception as e:
+                logging.warning(f"⚠️ Не удалось проверить IP через прокси: {e}")
             
-            # Даем время на прогрузку динамики
-            await page.wait_for_timeout(7000)
+            # Идем на HH с измененным wait_until
+            logging.info(f"🔗 Переход на HH.ru...")
+            await page.goto(url, wait_until="domcontentloaded", timeout=40000)
+            
+            # Ждем появления важного элемента или просто 5 секунд
+            await asyncio.sleep(7) 
 
-            # ДИАГНОСТИКА
-            # Проверяем, нет ли на странице текста "ничего не найдено" или капчи
-            content = await page.content()
-            if "вакансий не найдено" in content.lower() or "ничего не найдено" in content.lower():
-                logging.warning('🕵️ На странице написано: "Ничего не найдено". Сохраняю скриншот для проверки.')
-                await page.screenshot(path="debug_empty_search.png")
-            
-            if "капча" in content.lower() or "робот" in content.lower():
-                logging.warning("🚨 Вероятнее всего мы наткнулись на капчу. Делаю скриншот.")
-                await page.screenshot(path="debug_captcha.png")
+            # Делаем скриншот для отладки ВСЕГДА, пока не починим
+            await page.screenshot(path="last_attempt.png")
 
             html = await page.content()
             return html
             
         except Exception as e:
             logging.error(f"❌ Ошибка в симуляторе браузера: {e}")
-            return ""
+            # Пытаемся взять хотя бы то, что успело загрузиться
+            try:
+                return await page.content()
+            except:
+                return ""
         finally:
             if 'browser' in locals():
                 await browser.close()
