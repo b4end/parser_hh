@@ -129,34 +129,58 @@ def extract_vacancies(html_content: str) -> tuple[list, str]:
     return unique_vacancies, "success"
 
 async def fetch_html_with_browser(url: str) -> str:
-    """Запускает headless-браузер, проходит базовые JS-проверки и возвращает HTML."""
-    logging.info("🌐 Запускаем браузер-симулятор (Playwright)...")
+    logging.info("🌐 Запускаем браузер-симулятор (Сhromium)...")
     
     async with async_playwright() as p:
-        # Настраиваем прокси для браузера, если он есть
         proxy_config = {"server": HH_PROXY} if HH_PROXY else None
         
         try:
-            # Запускаем скрытый браузер
-            browser = await p.chromium.launch(headless=True, proxy=proxy_config)
-            
-            # Эмулируем обычного пользователя
-            context = await browser.new_context(
-                user_agent=HEADERS["User-Agent"],
-                viewport={"width": 1920, "height": 1080},
-                locale="ru-RU",
-                timezone_id="Europe/Moscow"
+            browser = await p.chromium.launch(
+                headless=True, 
+                proxy=proxy_config,
+                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
             )
             
+            # Создаем контекст с эмуляцией обычного Chrome на Windows
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                viewport={"width": 1920, "height": 1080},
+                locale="ru-RU"
+            )
+            
+            # 🔥 ВАЖНО: Устанавливаем куку региона, чтобы HH не путался
+            await context.add_cookies([{
+                'name': 'hhtoken',
+                'value': 'invalid', # просто заглушка
+                'domain': '.hh.ru',
+                'path': '/'
+            }, {
+                'name': 'area',
+                'value': '113', # Москва (как базовый регион для поиска)
+                'domain': '.hh.ru',
+                'path': '/'
+            }])
+
             page = await context.new_page()
             
-            # Переходим по ссылке и ждем, пока загрузятся скрипты
-            await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            # Переходим по URL
+            logging.info(f"🔗 Переход по адресу...")
+            await page.goto(url, wait_until="networkidle", timeout=60000)
             
-            # Ожидаем 3 секунды. За это время антибот-скрипты (Cloudflare/Qrator) 
-            # обычно отрабатывают и редиректят нас на нужную страницу с вакансиями
-            await page.wait_for_timeout(3000)
+            # Даем время на прогрузку динамики
+            await page.wait_for_timeout(7000)
+
+            # ДИАГНОСТИКА
+            # Проверяем, нет ли на странице текста "ничего не найдено" или капчи
+            content = await page.content()
+            if "вакансий не найдено" in content.lower() or "ничего не найдено" in content.lower():
+                logging.warning('🕵️ На странице написано: "Ничего не найдено". Сохраняю скриншот для проверки.')
+                await page.screenshot(path="debug_empty_search.png")
             
+            if "капча" in content.lower() or "робот" in content.lower():
+                logging.warning("🚨 Вероятнее всего мы наткнулись на капчу. Делаю скриншот.")
+                await page.screenshot(path="debug_captcha.png")
+
             html = await page.content()
             return html
             
@@ -166,6 +190,7 @@ async def fetch_html_with_browser(url: str) -> str:
         finally:
             if 'browser' in locals():
                 await browser.close()
+
 
 async def fetch_vacancies() -> list:
     params = {
@@ -207,7 +232,6 @@ async def fetch_vacancies() -> list:
 
     # ПОПЫТКА 2: Симуляция браузера через Playwright
     # Мы доходим сюда только если curl_cffi поймал капчу или вернул пустую страницу
-    logging.info(f"🚀 Запрос через Сhromium...")
     html_content = await fetch_html_with_browser(full_url)
     
     if not html_content:
