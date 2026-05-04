@@ -164,9 +164,23 @@ async def main():
     @dp.message(Command("start"))
     async def cmd_start(message: types.Message):
         if message.from_user.id == ADMIN_ID:
-            await message.answer("🤖 Здравствуйте! Я начал мониторинг HH. Как только появится новая вакансия Junior DS/ML, я пришлю её сюда.")
+            await message.answer("🤖 Здравствуйте! Как только появится новая вакансия Junior DS/ML, я пришлю её сюда.")
         else:
             await message.answer("🔒 Извините, я работаю только со своим создателем.")
+
+    # Проверка прокси для тг 
+    if PROXY_URL:
+        try:
+            logging.info(f"🔄 Проверка связи с Telegram через прокси...")
+            await bot.get_me()
+            logging.info("✅ Успешное подключение к Telegram через прокси.")
+        except Exception as e:
+            logging.warning(f"⚠️ Прокси для Telegram недоступен: {e}")
+            logging.warning("🌐 Переключаюсь на прямое соединение (без прокси)...")
+            await bot.session.close() # Закрываем сломанную сессию
+            bot = Bot(token=BOT_TOKEN) # Пересоздаем бота для прямой работы
+    else:
+        logging.info("🌐 Подключение к Telegram напрямую (без прокси).")
 
     try:
         await dp.start_polling(bot)
